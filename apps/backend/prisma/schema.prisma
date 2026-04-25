@@ -24,6 +24,7 @@ model Recording {
   s3Key       String          @map("s3_key")
   deviceId    String          @map("device_id")
   status      RecordingStatus @default(pending)
+  analysis    Json?
   createdAt   DateTime        @default(now()) @map("created_at")
   uploadedAt  DateTime?       @map("uploaded_at")
 
