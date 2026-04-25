@@ -1,0 +1,31 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RecordingStatus {
+  pending
+  uploaded
+  analysing
+  done
+}
+
+model Recording {
+  id          String          @id @default(uuid()) @db.Uuid
+  sha256      String          @unique
+  contactName String?         @map("contact_name")
+  recordedAt  DateTime        @map("recorded_at")
+  durationMs  Int             @map("duration_ms")
+  sizeBytes   Int             @map("size_bytes")
+  s3Key       String          @map("s3_key")
+  deviceId    String          @map("device_id")
+  status      RecordingStatus @default(pending)
+  createdAt   DateTime        @default(now()) @map("created_at")
+  uploadedAt  DateTime?       @map("uploaded_at")
+
+  @@map("recordings")
+}
