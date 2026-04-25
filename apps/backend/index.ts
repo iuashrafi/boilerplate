@@ -34,6 +34,10 @@ type ConfirmRecordingBody = {
   recordingId?: unknown;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -56,27 +60,34 @@ function getS3Key(sha256: string, displayName: string) {
   return `recordings/${sha256}${getFileExtension(displayName)}`;
 }
 
-function validatePrepareBody(body: PrepareRecordingBody) {
+function validatePrepareBody(body: unknown) {
   const errors: string[] = [];
 
-  if (!isNonEmptyString(body.sha256)) errors.push("sha256 is required");
-  if (!isNonEmptyString(body.displayName)) {
+  if (!isRecord(body)) {
+    return { errors: ["JSON request body is required"] };
+  }
+
+  const prepareBody = body as PrepareRecordingBody;
+
+  if (!isNonEmptyString(prepareBody.sha256)) errors.push("sha256 is required");
+  if (!isNonEmptyString(prepareBody.displayName)) {
     errors.push("displayName is required");
   }
-  if (!isPositiveInteger(body.recordedAt)) {
+  if (!isPositiveInteger(prepareBody.recordedAt)) {
     errors.push("recordedAt must be a positive Unix timestamp in ms");
   }
-  if (!isPositiveInteger(body.durationMs)) {
+  if (!isPositiveInteger(prepareBody.durationMs)) {
     errors.push("durationMs must be a positive integer");
   }
-  if (!isPositiveInteger(body.sizeBytes)) {
+  if (!isPositiveInteger(prepareBody.sizeBytes)) {
     errors.push("sizeBytes must be a positive integer");
   }
-  if (!isNonEmptyString(body.deviceId)) errors.push("deviceId is required");
+  if (!isNonEmptyString(prepareBody.deviceId))
+    errors.push("deviceId is required");
   if (
-    body.contactName !== undefined &&
-    body.contactName !== null &&
-    typeof body.contactName !== "string"
+    prepareBody.contactName !== undefined &&
+    prepareBody.contactName !== null &&
+    typeof prepareBody.contactName !== "string"
   ) {
     errors.push("contactName must be a string");
   }
@@ -87,23 +98,29 @@ function validatePrepareBody(body: PrepareRecordingBody) {
 
   return {
     value: {
-      sha256: body.sha256 as string,
-      displayName: body.displayName as string,
-      contactName: (body.contactName as string | undefined) ?? null,
-      recordedAt: new Date(body.recordedAt as number),
-      durationMs: body.durationMs as number,
-      sizeBytes: body.sizeBytes as number,
-      deviceId: body.deviceId as string,
+      sha256: prepareBody.sha256 as string,
+      displayName: prepareBody.displayName as string,
+      contactName: (prepareBody.contactName as string | undefined) ?? null,
+      recordedAt: new Date(prepareBody.recordedAt as number),
+      durationMs: prepareBody.durationMs as number,
+      sizeBytes: prepareBody.sizeBytes as number,
+      deviceId: prepareBody.deviceId as string,
     },
   };
 }
 
-function validateConfirmBody(body: ConfirmRecordingBody) {
-  if (!isNonEmptyString(body.recordingId)) {
+function validateConfirmBody(body: unknown) {
+  if (!isRecord(body)) {
+    return { errors: ["JSON request body is required"] };
+  }
+
+  const confirmBody = body as ConfirmRecordingBody;
+
+  if (!isNonEmptyString(confirmBody.recordingId)) {
     return { errors: ["recordingId is required"] };
   }
 
-  return { value: { recordingId: body.recordingId } };
+  return { value: { recordingId: confirmBody.recordingId } };
 }
 
 async function getUploadUrl(s3Key: string, sizeBytes: number) {
