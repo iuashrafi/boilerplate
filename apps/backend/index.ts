@@ -237,6 +237,8 @@ app.post("/recordings/confirm", async (req, res, next) => {
       },
     });
 
+    await queueRecordingAnalysis(recording.id);
+
     return res.json({
       status: "uploaded",
       analysisStatus: "queued",
