@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { PrismaClient, RecordingStatus } from "@prisma/client";
+import { RecordingStatus } from "@prisma/client";
 import {
   DeleteMessageCommand,
   ReceiveMessageCommand,
@@ -7,8 +7,7 @@ import {
 } from "@aws-sdk/client-sqs";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import talkToChatGPT from "./services/openaiService";
-
-const prisma = new PrismaClient();
+import { prisma } from "./lib/prisma";
 
 const AWS_REGION = process.env.AWS_REGION ?? "ap-south-1";
 const S3_BUCKET = process.env.S3_BUCKET;
@@ -303,12 +302,10 @@ async function pollQueue() {
     }
   }
 
-  await prisma.$disconnect();
   console.log("Recording analysis worker stopped");
 }
 
 pollQueue().catch(async (error) => {
   console.error(error);
-  await prisma.$disconnect();
   process.exit(1);
 });
