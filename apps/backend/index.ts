@@ -3,6 +3,7 @@ import cors from "cors";
 import "dotenv/config";
 import { PrismaClient, RecordingStatus } from "@prisma/client";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const app = express();
@@ -11,11 +12,13 @@ const prisma = new PrismaClient();
 const PORT = Number(process.env.PORT ?? 8080);
 const AWS_REGION = process.env.AWS_REGION ?? "ap-south-1";
 const S3_BUCKET = process.env.S3_BUCKET;
+const ANALYSIS_QUEUE_URL = process.env.ANALYSIS_QUEUE_URL;
 const UPLOAD_URL_EXPIRES_SECONDS = Number(
   process.env.S3_UPLOAD_URL_EXPIRES_SECONDS ?? 15 * 60,
 );
 
 const s3 = new S3Client({ region: AWS_REGION });
+const sqs = new SQSClient({ region: AWS_REGION });
 
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
@@ -144,6 +147,19 @@ async function getUploadUrl(s3Key: string, sizeBytes: number) {
   return { uploadUrl, uploadUrlExpiresAt };
 }
 
+async function queueRecordingAnalysis(recordingId: string) {
+  if (!ANALYSIS_QUEUE_URL) {
+    throw new Error("ANALYSIS_QUEUE_URL is not configured");
+  }
+
+  await sqs.send(
+    new SendMessageCommand({
+      QueueUrl: ANALYSIS_QUEUE_URL,
+      MessageBody: JSON.stringify({ recordingId }),
+    }),
+  );
+}
+
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
@@ -230,6 +246,64 @@ app.post("/recordings/confirm", async (req, res, next) => {
   }
 });
 
+async function handleAnalyseRecording(
+  req: express.Request,
+  res: express.Response,
+) {
+  const parsed = validateConfirmBody(req.body);
+
+  if ("errors" in parsed) {
+    return res.status(400).json({ errors: parsed.errors });
+  }
+
+  const recording = await prisma.recording.findUnique({
+    where: { id: parsed.value.recordingId },
+  });
+
+  if (!recording) {
+    return res.status(404).json({ error: "recording_not_found" });
+  }
+
+  if (recording.status === RecordingStatus.pending) {
+    return res.status(409).json({ error: "recording_not_uploaded" });
+  }
+
+  if (recording.status === RecordingStatus.analysing) {
+    return res.status(202).json({
+      status: "analysing",
+      analysisStatus: "queued",
+    });
+  }
+
+  await queueRecordingAnalysis(recording.id);
+
+  await prisma.recording.update({
+    where: { id: recording.id },
+    data: { status: RecordingStatus.analysing },
+  });
+
+  return res.status(202).json({
+    status: "analysing",
+    analysisStatus: "queued",
+  });
+}
+
+app.post("/recordings/analyse", async (req, res, next) => {
+  try {
+    return await handleAnalyseRecording(req, res);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/recordings/analyze", async (req, res, next) => {
+  try {
+    return await handleAnalyseRecording(req, res);
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.use(
   (
     error: unknown,
@@ -244,6 +318,13 @@ app.use(
       error.message === "S3_BUCKET is not configured"
     ) {
       return res.status(500).json({ error: "s3_bucket_not_configured" });
+    }
+
+    if (
+      error instanceof Error &&
+      error.message === "ANALYSIS_QUEUE_URL is not configured"
+    ) {
+      return res.status(500).json({ error: "analysis_queue_not_configured" });
     }
 
     return res.status(500).json({ error: "internal_server_error" });

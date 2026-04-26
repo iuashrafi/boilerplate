@@ -9,5 +9,5 @@
     "forceConsistentCasingInFileNames": true,
     "outDir": "dist"
   },
-  "include": ["index.ts", "prisma/**/*.ts"]
+  "include": ["*.ts", "prisma/**/*.ts"]
 }
