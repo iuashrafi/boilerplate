@@ -7,7 +7,8 @@
     "strict": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "outDir": "dist"
+    "outDir": "dist",
+    "rootDir": "."
   },
-  "include": ["*.ts", "prisma/**/*.ts"]
+  "include": ["*.ts", "services/**/*.ts", "lib/**/*.ts", "prisma/**/*.ts"]
 }
