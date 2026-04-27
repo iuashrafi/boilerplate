@@ -20,37 +20,7 @@ const OPENAI_ANALYSIS_MODEL = "gpt-4.1-mini";
 const ELEVENLABS_SPEECH_TO_TEXT_URL =
   "https://api.elevenlabs.io/v1/speech-to-text";
 
-const ANALYSIS_SYSTEM_PROMPT = `You are an AI assistant that analyzes call transcripts.
-
-Given a call transcript, perform the following tasks:
-- Generate a concise summary of the conversation.
-- Identify the primary intent of the caller (the main reason for the call).
-- Determine the overall sentiment of the caller.
-- Extract key topics discussed in the conversation.
-- Identify any action items or next steps.
-- Indicate whether a follow-up is required.
-
-Guidelines:
-- The summary should be brief (2–4 sentences) and capture key points only.
-- The intent should be a short phrase (e.g., "billing inquiry", "technical support", "order cancellation").
-- Sentiment should be one of: "positive", "neutral", or "negative".
-- keyTopics should be an array of 3–6 short phrases.
-- actionItems should be an array of clear, actionable steps (empty array if none).
-- followUpRequired should be a boolean (true or false).
-- Focus on the caller’s perspective when determining intent and sentiment.
-- Ignore small talk and irrelevant details.
-- Do not include any explanation outside the JSON.
-
-Output strictly in the following JSON format:
-{
-  "summary": "....",
-  "intent": "....",
-  "sentiment": "positive | neutral | negative",
-  "keyTopics": ["...", "..."],
-  "actionItems": ["...", "..."],
-  "followUpRequired": true
-}
-`;
+const CALL_RECORDING_PROMPT_NAME = "call_recording_prompt_1";
 
 const sqs = new SQSClient({ region: AWS_REGION });
 const s3 = new S3Client({ region: AWS_REGION });
@@ -170,10 +140,10 @@ async function transcribeRecording(audioBuffer: Buffer, filename: string) {
   throw new Error("ElevenLabs STT response did not include transcript text");
 }
 
-async function analyseTranscript(transcript: string) {
+async function analyseTranscript(transcript: string, systemPrompt: string) {
   const { response: analysisJson } = await talkToChatGPT(
     [
-      { role: "system", content: ANALYSIS_SYSTEM_PROMPT },
+      { role: "system", content: systemPrompt },
       {
         role: "user",
         content: [
@@ -225,6 +195,14 @@ async function analyseTranscript(transcript: string) {
 async function processRecording(recordingId: string) {
   console.log(`[worker] Processing recording: ${recordingId}`);
 
+  const prompt = await prisma.prompt.findFirst({
+    where: { name: CALL_RECORDING_PROMPT_NAME },
+  });
+
+  if (!prompt) {
+    throw new Error(`Prompt '${CALL_RECORDING_PROMPT_NAME}' not found in DB`);
+  }
+
   const recording = await prisma.recording.findUnique({
     where: { id: recordingId },
   });
@@ -256,12 +234,12 @@ async function processRecording(recordingId: string) {
   console.log(`[worker] Transcription done (${transcript.length} chars)`);
 
   console.log(`[worker] Sending transcript to OpenAI for analysis`);
-  const analysis = await analyseTranscript(transcript);
+  const analysis = await analyseTranscript(transcript, prompt.content);
   console.log(`[worker] Analysis complete | sentiment: ${analysis.sentiment}`);
 
   await prisma.recording.update({
     where: { id: recording.id },
-    data: { analysis, status: RecordingStatus.done },
+    data: { analysis, status: RecordingStatus.done, promptId: prompt.id },
   });
   console.log(
     `[worker] Saved analysis to DB | recording: ${recordingId} | status -> done`,
