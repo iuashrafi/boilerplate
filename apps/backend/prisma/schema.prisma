@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 enum RecordingStatus {
@@ -12,6 +13,17 @@ enum RecordingStatus {
   uploaded
   analysing
   done
+}
+
+model Prompt {
+  id         String      @id @default(uuid()) @db.Uuid
+  name       String
+  content    String
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+  recordings Recording[]
+
+  @@map("prompts")
 }
 
 model Recording {
@@ -26,7 +38,10 @@ model Recording {
   status      RecordingStatus @default(pending)
   analysis    Json?
   createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
   uploadedAt  DateTime?       @map("uploaded_at")
+  prompt      Prompt?         @relation(fields: [promptId], references: [id])
+  promptId    String?         @map("prompt_id") @db.Uuid
 
   @@map("recordings")
 }
