@@ -156,36 +156,6 @@ async function analyseTranscript(transcript: string, systemPrompt: string) {
     ],
     {
       gpt_version: OPENAI_ANALYSIS_MODEL,
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "recording_analysis",
-          strict: true,
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              transcript: { type: "string" },
-              summary: { type: "string" },
-              sentiment: {
-                type: "string",
-                enum: ["positive", "neutral", "negative", "mixed", "unknown"],
-              },
-              keyTopics: { type: "array", items: { type: "string" } },
-              actionItems: { type: "array", items: { type: "string" } },
-              followUpRequired: { type: "boolean" },
-            },
-            required: [
-              "transcript",
-              "summary",
-              "sentiment",
-              "keyTopics",
-              "actionItems",
-              "followUpRequired",
-            ],
-          },
-        },
-      },
     },
   );
 
